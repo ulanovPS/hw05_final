@@ -23,5 +23,5 @@ class PostsURLTests(TestCase):
                 self.assertEqual(response.status_code, HTTPStatus.OK)
                 self.assertTemplateUsed(
                     response,
-                    self.about_urls_name[address]
+                    about_urls_name[address]
                 )
