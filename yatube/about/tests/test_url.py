@@ -7,10 +7,6 @@ User = get_user_model()
 
 
 class PostsURLTests(TestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
     def setUp(self):
         """Создаем неавторизованный клиент"""
         self.guest_client = Client()
@@ -27,5 +23,5 @@ class PostsURLTests(TestCase):
                 self.assertEqual(response.status_code, HTTPStatus.OK)
                 self.assertTemplateUsed(
                     response,
-                    self.public_urls_name[address]
+                    self.about_urls_name[address]
                 )
