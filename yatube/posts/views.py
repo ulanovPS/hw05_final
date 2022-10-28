@@ -1,5 +1,3 @@
-from xml.etree.ElementTree import Comment
-
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
@@ -112,7 +110,6 @@ def post_edit(request, post_id):
 
 @login_required
 def add_comment(request, post_id):
-    # Получите пост
     form = CommentForm(request.POST or None)
     if form.is_valid():
         comment = form.save(commit=False)
@@ -126,14 +123,13 @@ def add_comment(request, post_id):
 def follow_index(request):
     list_of_posts = Post.objects.filter(author__following__user=request.user)
     context = paginator_post(list_of_posts, request)
-    context.update({'active': 'follow'})
-    return render(request, 'posts/index.html', context)
+    return render(request, 'posts/follow.html', context)
 
 
 @login_required
 def profile_follow(request, username):
     user = request.user
-    author = User.objects.get(username=username)
+    author = get_object_or_404(User, username=username)
     is_follower = Follow.objects.filter(user=user, author=author)
     if user != author and not is_follower.exists():
         Follow.objects.create(user=user, author=author)

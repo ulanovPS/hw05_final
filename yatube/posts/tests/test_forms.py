@@ -86,8 +86,10 @@ class PostCreateFormTests(TestCase):
             data=form_data,
             follow=True,
         )
-        add_count = Post.objects.count()
-        self.assertEqual(first_count, add_count)
+        self.assertEqual(
+            Post.objects.count(),
+            first_count
+        )
 
     def test_authorized_edit_post(self):
         """Авторизованный пользователь может редактировать"""
@@ -95,9 +97,6 @@ class PostCreateFormTests(TestCase):
             'text': 'Данные из формы',
             'group': self.group.id
         }
-        old_group_response = self.guest_client.get(
-            f'/group/{self.group.slug}/',
-        )
         """Создаем пост"""
         self.authorized_client.post(
             reverse('posts:post_create'),
@@ -105,7 +104,6 @@ class PostCreateFormTests(TestCase):
             follow=True,
         )
         post_2 = Post.objects.get(id=self.group.id)
-        self.client.get(f'/posts/{post_2.id}/edit/')
         form_data = {
             'text': 'Измененный текст',
             'group': self.group2.id
@@ -121,14 +119,9 @@ class PostCreateFormTests(TestCase):
         )
         post_2 = Post.objects.get(id=self.group.id)
         self.assertEqual(response_edit.status_code, HTTPStatus.OK)
+        """Проверяем что запись изменилась"""
         self.assertEqual(post_2.text, form_data['text'])
-        new_group_response = self.authorized_client.get(
-            reverse('posts:group_list', args=(self.group2.slug,))
-        )
-        """Проверяем что записей со старой группой нет"""
-        new_count = new_group_response.context['page_obj'].paginator.count
-        old_count = old_group_response.context['page_obj'].paginator.count
-        self.assertEqual(new_count, old_count + 1)
+        self.assertEqual(post_2.group.pk, form_data['group'])
 
     @classmethod
     def tearDownClass(cls):
@@ -155,12 +148,16 @@ class CommentTests(TestCase):
             email='author@gmail.ru',
             password='test_pass'
         ),
+        cls.group = Group.objects.create(
+            title='Заголовок для 1 тестовой группы',
+            slug='test_slug1'
+        )
+
         cls.post = Post.objects.create(
             author=User.objects.create_user(username=cls.user_author),
             text='Тестовая запись для создания 1 поста',
-            group=Group.objects.create(
-                title='Заголовок для 1 тестовой группы',
-                slug='test_slug1'))
+            group=cls.group,
+        )
 
     def setUp(self):
         self.guest_client = Client()
@@ -187,7 +184,7 @@ class CommentTests(TestCase):
 
     def test_authorized_new_comment(self):
         """Авторизированный пользователь может создавать комментарии"""
-        comment_count = Comment.objects.filter(post=self.post.pk).count()
+        comment_count = self.post.comments.count()
         form_data = {
             'text': 'Комментарий от авторизированного пользователя',
         }

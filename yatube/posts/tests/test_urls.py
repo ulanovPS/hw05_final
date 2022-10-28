@@ -2,6 +2,7 @@ from http import HTTPStatus
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
+from django.urls import reverse
 from posts.models import Group, Post
 
 User = get_user_model()
@@ -57,13 +58,13 @@ class PostsURLTests(TestCase):
 
     def test_public_url_and_template_guest(self):
         """Проверка доступности адреса и шаблона публичных страниц гостю"""
-        for address in self.public_urls_name.keys():
+        for address, template in self.public_urls_name.items():
             with self.subTest(address=address):
                 response = self.guest_client.get(address)
                 self.assertEqual(response.status_code, HTTPStatus.OK)
                 self.assertTemplateUsed(
                     response,
-                    self.public_urls_name[address]
+                    template,
                 )
 
     def test_close_url_and_template_authorized_client(self):
@@ -92,10 +93,10 @@ class PostsURLTests(TestCase):
                 response = self.guest_client.get(address)
                 self.assertRedirects(
                     response,
-                    f'/auth/login/?next={address}'
+                    f'{reverse("users:login")}?next={address}'
                 )
 
-    def test_add_comment_url_and_redirect(self):
+    def test_add_comment_url_and_redirect_user(self):
         """Проверяем доступность редиректа при добавлении коментария
         авторизованным пользоватлем"""
         data = {
@@ -109,8 +110,13 @@ class PostsURLTests(TestCase):
             response,
             f'/posts/{self.post.pk}/',
         )
+
+    def test_add_comment_url_and_redirect_guest(self):
         """Проверяем не доступность создание комментария для гостя и
         редирект на страницу логин"""
+        data = {
+            'text': 'Тестовый коментарий'
+        }
         response = self.guest_client.post(
             f'/posts/{self.post.pk}/comment/',
             data=data,
@@ -120,7 +126,7 @@ class PostsURLTests(TestCase):
             f'/auth/login/?next=/posts/{self.post.pk}/comment/'
         )
 
-    def test_follow_unfollow_and_redirect(self):
+    def test_follow_and_redirect_user(self):
         """Проверяем создаение подписки на автора другим пользователем"""
         response = self.authorized_client_pavel.post(
             f'/profile/{self.post.author}/follow/',
@@ -129,7 +135,12 @@ class PostsURLTests(TestCase):
             response,
             f'/profile/{self.post.author}/',
         )
+
+    def test_follow_and_redirect_user(self):
         """Отписываемся от автора и проверяем редирект"""
+        response = self.authorized_client_pavel.post(
+            f'/profile/{self.post.author}/follow/',
+        )
         response = self.authorized_client_pavel.post(
             f'/profile/{self.post.author}/unfollow/',
         )
@@ -137,6 +148,8 @@ class PostsURLTests(TestCase):
             response,
             f'/profile/{self.post.author}/',
         )
+
+    def test_follow_and_redirect_guest(self):
         """Проверяем недосутпность подписки гостем и редирект"""
         response = self.guest_client.post(
             f'/profile/{self.post.author}/follow/',
@@ -145,7 +158,9 @@ class PostsURLTests(TestCase):
             response,
             f'/auth/login/?next=/profile/{self.post.author}/follow/'
         )
-        """Проверяем недоступность отменить подписку дял гостя и редирект"""
+
+    def test_unfollow_and_redirect_guest(self):
+        """Проверяем недоступность отменить подписку для гостя и редирект"""
         response = self.guest_client.post(
             f'/profile/{self.post.author}/unfollow/',
         )

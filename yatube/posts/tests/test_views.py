@@ -38,12 +38,15 @@ class PostTests(TestCase):
         )
         cls.user_pavel = User.objects.create_user(username='pavel')
 
+        cls.group = Group.objects.create(
+            title='Заголовок для 1 тестовой группы',
+            slug='test_slug1'
+        )
+
         cls.post = Post.objects.create(
             author=cls.user_pavel,
             text='1Тестовая запись для создания 1 поста',
-            group=Group.objects.create(
-                title='Заголовок для 1 тестовой группы',
-                slug='test_slug1'),
+            group=cls.group,
             image=uploaded)
 
     def setUp(self):
@@ -111,6 +114,7 @@ class PostTests(TestCase):
         self.assertEqual(first_object, self.post)
         self.assertIn('group', response.context)
         self.assertIsInstance(response.context['group'], Group)
+        self.assertEqual(response.context['group'], self.post.group)
 
     def test_profile_page_show_correct_context(self):
         """Проверяем шаблон profile"""
@@ -123,6 +127,7 @@ class PostTests(TestCase):
         self.assertEqual(first_object, self.post)
         self.assertIn('author', response.context)
         self.assertIsInstance(response.context['author'], User)
+        self.assertEqual(response.context['author'], self.post.author)
 
     def test_post_detail_page_show_correct_context(self):
         """Проверяем шаблон post_detail"""
@@ -132,12 +137,14 @@ class PostTests(TestCase):
         ))
         self.assertIn('post', response.context)
         self.assertIsInstance(response.context['post'], Post)
+        self.assertEqual(response.context['post'], self.post)
 
     def test_create_page_show_correct_context(self):
         """Проверяем шаблон create"""
         response = self.authorized_client.get(reverse('posts:post_create'))
         form_fields = {
             'text': forms.fields.CharField,
+            'group': forms.fields.ChoiceField
         }
         for value, expected in form_fields.items():
             with self.subTest(value=value):
@@ -254,14 +261,12 @@ class FollowTests(TestCase):
 
     def test_follow(self):
         """Для пользователя follower проверяем создание подписки"""
-        count = Follow.objects.filter(user=self.user_following).count()
         self.assertFalse(
             Follow.objects.filter(
                 user=self.user_follower,
                 author=self.user_following
             ).exists()
         )
-        self.assertEqual(count, 0)
         self.client_auth_follower.get(
             reverse(
                 'posts:profile_follow',
@@ -278,11 +283,9 @@ class FollowTests(TestCase):
 
     def test_unfollow(self):
         """Для пользователя проверяем отмену подписки"""
-        self.client_auth_follower.get(
-            reverse(
-                'posts:profile_follow',
-                kwargs={'username': self.user_following.username}
-            )
+        Follow.objects.create(
+            user=self.user_follower,
+            author=self.user_following,
         )
         self.client_auth_follower.get(
             reverse(
@@ -301,6 +304,7 @@ class FollowTests(TestCase):
 
     def test_follow_by_myself(self):
         """Проверяем может ли пользователь подписаться на себя"""
+        count_first = Follow.objects.count()
         self.client_auth_follower.get(
             reverse(
                 'posts:profile_follow',
@@ -308,7 +312,7 @@ class FollowTests(TestCase):
             )
         )
         """Если даже хочет, не может"""
-        self.assertEqual(Follow.objects.all().count(), 0)
+        self.assertEqual(Follow.objects.all().count(), count_first)
 
     def test_subscription_feed(self):
         """Создаем подписку пользователя follower на посты following"""
@@ -331,7 +335,6 @@ class FollowTests(TestCase):
             response.context['page_obj']
         )
         self.assertEqual(post_text_0, 'Тестовая запись для тестирования ленты')
-        """"""
         """Так как он не может быть подписан на себя, не видит"""
         self.assertNotContains(
             response,
