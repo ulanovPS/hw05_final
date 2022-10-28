@@ -1,12 +1,16 @@
 from http import HTTPStatus
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import Client, TestCase
 
 User = get_user_model()
 
 
 class PostsURLTests(TestCase):
+    def setUp(self):
+        """Создаем неавторизованный клиент"""
+        self.guest_client = Client()
+
     """Прверяем доступность статических страниц"""
     def test_url_static(self):
         about_urls_name = {
