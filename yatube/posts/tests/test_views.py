@@ -7,19 +7,22 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from posts.models import Follow, Group, Post
 
 User = get_user_model()
 
+TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
 class PostTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         """Создаем записи в базе данных для тестирования"""
-        settings.MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
+        # settings.MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
         small_gif = (
             b'\x47\x49\x46\x38\x39\x61\x02\x00'
             b'\x01\x00\x80\x00\x00\x00\x00\x00'
@@ -33,37 +36,21 @@ class PostTests(TestCase):
             content=small_gif,
             content_type='image/gif'
         )
+        cls.user_pavel = User.objects.create_user(username='pavel')
+
         cls.post = Post.objects.create(
-            author=User.objects.create_user(username='test_name1',
-                                            email='test1@mail.ru',
-                                            password='test_pass',),
+            author=cls.user_pavel,
             text='1Тестовая запись для создания 1 поста',
             group=Group.objects.create(
                 title='Заголовок для 1 тестовой группы',
                 slug='test_slug1'),
             image=uploaded)
 
-        cls.post = Post.objects.create(
-            author=User.objects.create_user(username='test_name2',
-                                            email='test2@mail.ru',
-                                            password='test_pass',),
-            text='2Тестовая запись для создания 2 поста',
-            group=Group.objects.create(
-                title='Заголовок для 2 тестовой группы',
-                slug='test_slug2'),
-            image=uploaded)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
-        super().tearDownClass()
-
     def setUp(self):
         """Создаем пользователя и авторизируем"""
         self.guest_client = Client()
-        self.user = User.objects.create_user(username='pavel')
         self.authorized_client = Client()
-        self.authorized_client.force_login(self.user)
+        self.authorized_client.force_login(self.user_pavel)
 
     def test_cache_index(self):
         """Тестируем кэш до и после очистки"""
@@ -84,11 +71,11 @@ class PostTests(TestCase):
             reverse('posts:group_posts'): 'posts/index.html',
             reverse(
                 'posts:group_list',
-                kwargs={'slug': 'test_slug2'}
+                kwargs={'slug': self.post.group.slug}
             ): 'posts/group_list.html',
             reverse(
                 'posts:profile',
-                kwargs={'username': 'test_name2'}
+                kwargs={'username': self.user_pavel}
             ): 'posts/profile.html',
             reverse(
                 'posts:post_detail',
@@ -109,57 +96,42 @@ class PostTests(TestCase):
     def test_index_page_show_correct_context(self):
         """Проверяем что возвращает шаблон index"""
         response = self.authorized_client.get(reverse('posts:group_posts'))
+        self.assertIn('page_obj', response.context)
         first_object = response.context['page_obj'][0]
-        self.assertEqual(
-            first_object.text,
-            self.post.text
-        )
-        self.assertEqual(first_object.author.username, 'test_name2')
-        self.assertEqual(first_object.pub_date.year, 2022)
-        self.assertEqual(
-            first_object.group.title,
-            'Заголовок для 2 тестовой группы'
-        )
-        self.assertEqual(first_object.group.slug, 'test_slug2')
-        self.assertEqual(first_object.image, Post.objects.first().image)
+        self.assertEqual(first_object, self.post)
 
     def test_group_list_page_show_correct_context(self):
         """Проверяем что возвращает шаблон group_list"""
         response = self.authorized_client.get(reverse(
             'posts:group_list',
-            kwargs={'slug': 'test_slug2'}
+            kwargs={'slug': self.post.group.slug}
         ))
+        self.assertIn('page_obj', response.context)
         first_object = response.context['page_obj'][0]
-        self.assertEqual(
-            first_object.text,
-            self.post.text
-        )
-        self.assertEqual(first_object.image, Post.objects.first().image)
+        self.assertEqual(first_object, self.post)
+        self.assertIn('group', response.context)
+        self.assertIsInstance(response.context['group'], Group)
 
     def test_profile_page_show_correct_context(self):
         """Проверяем шаблон profile"""
         response = self.authorized_client.get(reverse(
             'posts:profile',
-            kwargs={'username': 'test_name2'}
+            kwargs={'username': self.user_pavel}
         ))
+        self.assertIn('page_obj', response.context)
         first_object = response.context['page_obj'][0]
-        self.assertEqual(
-            first_object.text,
-            self.post.text,
-        )
-        self.assertEqual(first_object.image, self.post.image)
+        self.assertEqual(first_object, self.post)
+        self.assertIn('author', response.context)
+        self.assertIsInstance(response.context['author'], User)
 
     def test_post_detail_page_show_correct_context(self):
         """Проверяем шаблон post_detail"""
         response = self.authorized_client.get(reverse(
             'posts:post_detail',
-            kwargs={'post_id': self.post.id}
+            kwargs={'post_id': self.post.pk}
         ))
-        self.assertEqual(
-            response.context.get('post').text,
-            self.post.text
-        )
-        self.assertEqual(response.context.get('post').image, self.post.image)
+        self.assertIn('post', response.context)
+        self.assertIsInstance(response.context['post'], Post)
 
     def test_create_page_show_correct_context(self):
         """Проверяем шаблон create"""
@@ -185,15 +157,18 @@ class PostTests(TestCase):
                 PostTests.post.text,
             )
 
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
 
 class PaginatorViewsTest(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         """Создаем 13 записей в базе данных для тестирования"""
-        cls.author = User.objects.create_user(username='test_name',
-                                              email='test@mail.ru',
-                                              password='test_pass',)
+        cls.author = User.objects.create_user(username='test_name')
         cls.group = Group.objects.create(
             title=('Заголовок для тестовой группы'),
             slug='test_slug2',
@@ -211,9 +186,8 @@ class PaginatorViewsTest(TestCase):
     def setUp(self):
         """Создаем пользователя и авторизируем"""
         self.guest_client = Client()
-        self.user = User.objects.create_user(username='pavel')
         self.authorized_client = Client()
-        self.authorized_client.force_login(self.user)
+        self.authorized_client.force_login(self.author)
 
     def test_first_page_contains_ten_posts(self):
         """Тестируем первую страницу Paginator"""
@@ -256,6 +230,7 @@ class FollowTests(TestCase):
         """Добавляем записи в базу"""
         self.client_auth_follower = Client()
         self.client_auth_following = Client()
+        self.client_pavel = Client()
         self.user_follower = User.objects.create_user(
             username='follower',
             email='test_1@gmail.com',
@@ -266,6 +241,7 @@ class FollowTests(TestCase):
             email='test2@gmail.com',
             password='test_pass'
         )
+        self.user_pavel = User.objects.create_user(username='pavel')
         """Создаем пост пользователя following"""
         self.post = Post.objects.create(
             author=self.user_following,
@@ -274,9 +250,18 @@ class FollowTests(TestCase):
         """Авторизируем пользователей"""
         self.client_auth_follower.force_login(self.user_follower)
         self.client_auth_following.force_login(self.user_following)
+        self.client_pavel.force_login(self.user_pavel)
 
     def test_follow(self):
         """Для пользователя follower проверяем создание подписки"""
+        count = Follow.objects.filter(user=self.user_following).count()
+        self.assertFalse(
+            Follow.objects.filter(
+                user=self.user_follower,
+                author=self.user_following
+            ).exists()
+        )
+        self.assertEqual(count, 0)
         self.client_auth_follower.get(
             reverse(
                 'posts:profile_follow',
@@ -284,7 +269,12 @@ class FollowTests(TestCase):
             )
         )
         """Проверяем что подписка создалась"""
-        self.assertEqual(Follow.objects.all().count(), 1)
+        self.assertTrue(
+            Follow.objects.filter(
+                user=self.user_follower,
+                author=self.user_following
+            ).exists()
+        )
 
     def test_unfollow(self):
         """Для пользователя проверяем отмену подписки"""
@@ -301,6 +291,12 @@ class FollowTests(TestCase):
             )
         )
         """После отмены проверяем, что записей не осталось"""
+        self.assertFalse(
+            Follow.objects.filter(
+                user=self.user_follower,
+                author=self.user_following
+            ).exists()
+        )
         self.assertEqual(Follow.objects.all().count(), 0)
 
     def test_follow_by_myself(self):
@@ -317,6 +313,7 @@ class FollowTests(TestCase):
     def test_subscription_feed(self):
         """Создаем подписку пользователя follower на посты following"""
         """following имеет пост"""
+
         Follow.objects.create(
             user=self.user_follower,
             author=self.user_following
@@ -327,7 +324,15 @@ class FollowTests(TestCase):
         self.assertEqual(post_text_0, 'Тестовая запись для тестирования ленты')
         """Проверяем видит ли автор в подписках свой пост"""
         response = self.client_auth_following.get('/follow/')
-        """Так как он не может быть подписан на себя, зне видит"""
+        """Проверяем другим пользователем подписку, не увидит"""
+        response = self.client_pavel.get('/follow/')
+        self.assertNotIn(
+            'Тестовая запись для тестирования ленты',
+            response.context['page_obj']
+        )
+        self.assertEqual(post_text_0, 'Тестовая запись для тестирования ленты')
+        """"""
+        """Так как он не может быть подписан на себя, не видит"""
         self.assertNotContains(
             response,
             'Тестовая запись для тестирования ленты'

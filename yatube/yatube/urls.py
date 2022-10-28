@@ -17,6 +17,6 @@ if settings.DEBUG:
         settings.MEDIA_URL, document_root=settings.MEDIA_ROOT
     )
 
-handler404 = 'posts.views.page_not_found'
-handler500 = 'posts.views.server_error'
-handler403 = 'posts.vews.csrf_failure'
+handler404 = 'core.views.page_not_found'
+handler500 = 'core.views.server_error'
+handler403 = 'core.views.csrf_failure'

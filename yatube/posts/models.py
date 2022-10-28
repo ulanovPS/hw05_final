@@ -1,8 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import models
 
-# from pytils.translit import slugify
-
 User = get_user_model()
 
 
@@ -45,8 +43,8 @@ class Post(models.Model):
     )
     group = models.ForeignKey(
         Group,
-        blank='True',
-        null='True',
+        blank=True,
+        null=True,
         on_delete=models.SET_NULL,
         verbose_name='Группа',
         help_text='Группа, к которой будет относиться пост',
@@ -71,11 +69,14 @@ class Post(models.Model):
 
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE,
-                             related_name="comments")
+                             related_name='comments')
     author = models.ForeignKey(User, on_delete=models.CASCADE,
-                               related_name="comments")
+                               related_name='comments')
     text = models.TextField()
-    created = models.DateTimeField("date published", auto_now_add=True)
+    created = models.DateTimeField('date published', auto_now_add=True)
+
+    class Meta:
+        default_related_name = 'comments'
 
     def __str__(self):
         return self.text
@@ -83,6 +84,6 @@ class Comment(models.Model):
 
 class Follow(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE,
-                             related_name="follower")
+                             related_name='follower')
     author = models.ForeignKey(User, on_delete=models.CASCADE,
-                               related_name="following")
+                               related_name='following')

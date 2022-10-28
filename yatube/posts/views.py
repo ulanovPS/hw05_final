@@ -25,6 +25,7 @@ def index(request):
         'group'
     )
     context = paginator_post(posts, request)
+    context.update({'active': 'index'})
     return render(request, 'posts/index.html', context)
 
 
@@ -125,6 +126,7 @@ def add_comment(request, post_id):
 def follow_index(request):
     list_of_posts = Post.objects.filter(author__following__user=request.user)
     context = paginator_post(list_of_posts, request)
+    context.update({'active': 'follow'})
     return render(request, 'posts/index.html', context)
 
 
@@ -145,20 +147,3 @@ def profile_unfollow(request, username):
     if is_follower.exists():
         is_follower.delete()
     return redirect('posts:profile', username=author)
-
-
-def page_not_found(request, exception):
-    return render(
-        request,
-        "misc/404.html",
-        {"path": request.path},
-        status=404
-    )
-
-
-def server_error(request):
-    return render(request, 'misc/500.html', status=500)
-
-
-def csrf_failure(request, reason=''):
-    return render(request, 'misc/403csrf.html')
